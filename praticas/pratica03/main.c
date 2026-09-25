@@ -1,56 +1,72 @@
+#include "dag.h"
+
 #include <stdio.h>
-#include <string.h>
-#include "busca_grafo.h"
+#include <stdlib.h>
 
-int main()
+static void imprimir_ordem(const char *nome, int *ordem, int tamanho)
 {
-    GrafoLista *grafo = criar_grafo_lista(5);
+    int i;
 
-    adicionar_aresta(grafo, 0, 1);
-    adicionar_aresta(grafo, 0, 2);
-    adicionar_aresta(grafo, 1, 3);
-    adicionar_aresta(grafo, 2, 3);
-    adicionar_aresta(grafo, 3, 4);
-
-    for(int i = 0; i < grafo->num_vertices; i++)
-    {
-        printf("%i: -> ", i+1);
-        No *no = grafo->lista[i];
-        while(no != NULL)
-        {
-            printf("%i -> ", no->vertice + 1);
-            no = no->proximo;
-        }
-        printf("NULL\n");
+    printf("%s:", nome);
+    if (ordem == NULL) {
+        printf(" impossivel (o digrafo possui ciclo)\n");
+        return;
     }
 
-    int visitado[10];
-    int p[10];
-
-    memset(visitado, 0, sizeof(visitado));
-    printf("DFS a partir do vértice 1:\n");
-    dfs(grafo, 0, p, visitado);
+    for (i = 0; i < tamanho; i++) {
+        printf(" %d", ordem[i]);
+    }
     printf("\n");
+}
 
-    memset(visitado, 0, sizeof(visitado));
-    printf("DFS a partir do vértice 2:\n");
-    dfs(grafo, 1, p, visitado);
-    printf("\n");
+int main(void)
+{
+    GrafoLista *dag = criar_grafo_lista(6);
+    GrafoLista *ciclico = criar_grafo_lista(3);
+    int *ordem_kahn;
+    int *ordem_dfs;
+    int tamanho_kahn;
+    int tamanho_dfs;
 
-    memset(visitado, 0, sizeof(visitado));
-    printf("DFS a partir do vértice 3:\n");
-    dfs(grafo, 2, p, visitado);
-    printf("\n");
+    if (dag == NULL || ciclico == NULL) {
+        fprintf(stderr, "Erro ao criar os grafos.\n");
+        liberar_grafo_lista(dag);
+        liberar_grafo_lista(ciclico);
+        return EXIT_FAILURE;
+    }
 
-    memset(visitado, 0, sizeof(visitado));
-    printf("DFS a partir do vértice 4:\n");
-    dfs(grafo, 3, p, visitado);
-    printf("\n");
+    if (!inserir_aresta_lista(dag, 0, 1) ||
+        !inserir_aresta_lista(dag, 0, 2) ||
+        !inserir_aresta_lista(dag, 1, 3) ||
+        !inserir_aresta_lista(dag, 2, 3) ||
+        !inserir_aresta_lista(dag, 4, 5) ||
+        !inserir_aresta_lista(ciclico, 0, 1) ||
+        !inserir_aresta_lista(ciclico, 1, 2) ||
+        !inserir_aresta_lista(ciclico, 2, 0)) {
+        fprintf(stderr, "Erro ao inserir uma aresta.\n");
+        liberar_grafo_lista(dag);
+        liberar_grafo_lista(ciclico);
+        return EXIT_FAILURE;
+    }
 
-    memset(visitado, 0, sizeof(visitado));
-    printf("DFS a partir do vértice 5:\n");
-    dfs(grafo, 4, p, visitado);
-    printf("\n");
-    
-    return 0;
+    printf("Primeiro digrafo e DAG? %s\n", eh_dag(dag) ? "sim" : "nao");
+    ordem_kahn = ordenacao_topologica_kahn(dag, &tamanho_kahn);
+    ordem_dfs = ordenacao_topologica_dfs(dag, &tamanho_dfs);
+    imprimir_ordem("Kahn", ordem_kahn, tamanho_kahn);
+    imprimir_ordem("DFS", ordem_dfs, tamanho_dfs);
+    free(ordem_kahn);
+    free(ordem_dfs);
+
+    printf("Segundo digrafo e DAG? %s\n",
+           eh_dag(ciclico) ? "sim" : "nao");
+    ordem_kahn = ordenacao_topologica_kahn(ciclico, &tamanho_kahn);
+    ordem_dfs = ordenacao_topologica_dfs(ciclico, &tamanho_dfs);
+    imprimir_ordem("Kahn", ordem_kahn, tamanho_kahn);
+    imprimir_ordem("DFS", ordem_dfs, tamanho_dfs);
+    free(ordem_kahn);
+    free(ordem_dfs);
+
+    liberar_grafo_lista(dag);
+    liberar_grafo_lista(ciclico);
+    return EXIT_SUCCESS;
 }
