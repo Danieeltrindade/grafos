@@ -1,308 +1,186 @@
 #include "dijkstra.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 
-static void trocar(MinHeap *heap, int i, int j) {
-    NoHeap temp = heap->dados[i];
-    heap->dados[i] = heap->dados[j];
-    heap->dados[j] = temp;
-
-    heap->posicao[heap->dados[i].vertice] = i;
-    heap->posicao[heap->dados[j].vertice] = j;
+static void trocar(MinHeap *h, int a, int b)
+{
+    /* Toda troca atualiza o mapa inverso usado pela diminuicao de chave. */
+    NoHeap tmp = h->dados[a];
+    h->dados[a] = h->dados[b];
+    h->dados[b] = tmp;
+    h->posicao[h->dados[a].vertice] = a;
+    h->posicao[h->dados[b].vertice] = b;
 }
 
-static void subir(MinHeap *heap, int i) {
+static void subir(MinHeap *h, int i)
+{
     while (i > 0) {
         int pai = (i - 1) / 2;
-
-        if (heap->dados[pai].distancia <=
-            heap->dados[i].distancia) {
-            break;
-        }
-
-        trocar(heap, i, pai);
+        if (h->dados[pai].distancia <= h->dados[i].distancia) break;
+        trocar(h, pai, i);
         i = pai;
     }
 }
 
-static void descer(MinHeap *heap, int i) {
-    while (1) {
-        int menor = i;
-        int esq = 2 * i + 1;
-        int dir = 2 * i + 2;
-
-        if (esq < heap->tamanho &&
-            heap->dados[esq].distancia <
-            heap->dados[menor].distancia) {
-            menor = esq;
-        }
-
-        if (dir < heap->tamanho &&
-            heap->dados[dir].distancia <
-            heap->dados[menor].distancia) {
-            menor = dir;
-        }
-
-        if (menor == i) {
-            break;
-        }
-
-        trocar(heap, i, menor);
-        i = menor;
+MinHeap *criar_min_heap(int capacidade)
+{
+    if (capacidade <= 0 || (size_t)capacidade > SIZE_MAX / sizeof(NoHeap)
+        || (size_t)capacidade > SIZE_MAX / sizeof(int)) return NULL;
+    MinHeap *h = calloc(1, sizeof(*h));
+    if (!h) return NULL;
+    h->dados = malloc((size_t)capacidade * sizeof(*h->dados));
+    h->posicao = malloc((size_t)capacidade * sizeof(*h->posicao));
+    if (!h->dados || !h->posicao) {
+        liberar_min_heap(h);
+        return NULL;
     }
+    h->capacidade = capacidade;
+    for (int i = 0; i < capacidade; ++i) h->posicao[i] = -1;
+    return h;
 }
 
-GrafoListaPonderado *criar_grafo(int num_vertices) {
-    if (num_vertices <= 0) {
-        return NULL;
-    }
-
-    GrafoListaPonderado *g = malloc(sizeof(*g));
-
-    if (g == NULL) {
-        return NULL;
-    }
-
-    g->num_vertices = num_vertices;
-    g->adj = calloc(num_vertices, sizeof(*g->adj));
-
-    if (g->adj == NULL) {
-        free(g);
-        return NULL;
-    }
-
-    return g;
+void liberar_min_heap(MinHeap *h)
+{
+    if (!h) return;
+    free(h->dados);
+    free(h->posicao);
+    free(h);
 }
 
-int adicionar_aresta(GrafoListaPonderado *g, int origem,
-                     int destino, int peso) {
-    if (g == NULL || origem < 0 ||
-        destino < 0 || origem >= g->num_vertices ||
-        destino >= g->num_vertices || peso < 0) {
-        return 0;
-    }
-
-    ArestaPonderada *a = malloc(sizeof(*a));
-
-    if (a == NULL) {
-        return 0;
-    }
-
-    a->destino = destino;
-    a->peso = peso;
-    a->prox = g->adj[origem];
-    g->adj[origem] = a;
-
+int inserir_min_heap(MinHeap *h, int vertice, int distancia)
+{
+    if (!h || vertice < 0 || vertice >= h->capacidade
+        || h->tamanho == h->capacidade || h->posicao[vertice] != -1) return 0;
+    int i = h->tamanho++;
+    h->dados[i] = (NoHeap){vertice, distancia};
+    h->posicao[vertice] = i;
+    subir(h, i);
     return 1;
 }
 
-void liberar_grafo(GrafoListaPonderado *g) {
-    if (g == NULL) {
-        return;
+void diminuir_chave(MinHeap *h, int vertice, int distancia)
+{
+    if (!h || vertice < 0 || vertice >= h->capacidade) return;
+    int i = h->posicao[vertice];
+    if (i < 0 || distancia >= h->dados[i].distancia) return;
+    h->dados[i].distancia = distancia;
+    subir(h, i);
+}
+
+NoHeap extrair_minimo(MinHeap *h)
+{
+    if (!h || h->tamanho == 0) return (NoHeap){-1, INT_MAX};
+    NoHeap minimo = h->dados[0];
+    --h->tamanho;
+    h->posicao[minimo.vertice] = -1;
+    if (h->tamanho == 0) return minimo;
+    h->dados[0] = h->dados[h->tamanho];
+    h->posicao[h->dados[0].vertice] = 0;
+    int i = 0;
+    while (h->tamanho > 1 && i <= (h->tamanho - 2) / 2) {
+        int filho = 2 * i + 1;
+        if (filho + 1 < h->tamanho
+            && h->dados[filho + 1].distancia < h->dados[filho].distancia) ++filho;
+        if (h->dados[i].distancia <= h->dados[filho].distancia) break;
+        trocar(h, i, filho);
+        i = filho;
     }
+    return minimo;
+}
 
-    for (int i = 0; i < g->num_vertices; i++) {
-        ArestaPonderada *atual = g->adj[i];
+GrafoListaPonderado *criar_grafo_lista_ponderado(int n)
+{
+    if (n <= 0 || (size_t)n > SIZE_MAX / sizeof(NoPonderado *)) return NULL;
+    GrafoListaPonderado *g = malloc(sizeof(*g));
+    if (!g) return NULL;
+    g->n = n;
+    g->adj = calloc((size_t)n, sizeof(*g->adj));
+    if (!g->adj) { free(g); return NULL; }
+    return g;
+}
 
-        while (atual != NULL) {
-            ArestaPonderada *prox = atual->prox;
-            free(atual);
-            atual = prox;
-        }
+int inserir_aresta_ponderada(GrafoListaPonderado *g, int origem, int destino, int peso)
+{
+    if (!g || !g->adj || origem < 0 || origem >= g->n
+        || destino < 0 || destino >= g->n || peso < 0) return 0;
+    NoPonderado *no = malloc(sizeof(*no));
+    if (!no) return 0;
+    *no = (NoPonderado){destino, peso, g->adj[origem]};
+    g->adj[origem] = no;
+    return 1;
+}
+
+void liberar_grafo_lista_ponderado(GrafoListaPonderado *g)
+{
+    if (!g) return;
+    if (g->adj) for (int i = 0; i < g->n; ++i) {
+        NoPonderado *no = g->adj[i];
+        while (no) { NoPonderado *prox = no->prox; free(no); no = prox; }
     }
-
     free(g->adj);
     free(g);
 }
 
-MinHeap *criar_min_heap(int capacidade) {
-    if (capacidade <= 0) {
-        return NULL;
-    }
-
-    MinHeap *heap = malloc(sizeof(*heap));
-
-    if (heap == NULL) {
-        return NULL;
-    }
-
-    heap->dados = malloc(capacidade * sizeof(*heap->dados));
-    heap->posicao = malloc(capacidade * sizeof(*heap->posicao));
-
-    if (heap->dados == NULL || heap->posicao == NULL) {
-        free(heap->dados);
-        free(heap->posicao);
-        free(heap);
-        return NULL;
-    }
-
-    heap->capacidade = capacidade;
-    heap->tamanho = 0;
-
-    return heap;
-}
-
-void liberar_min_heap(MinHeap *heap) {
-    if (heap != NULL) {
-        free(heap->dados);
-        free(heap->posicao);
-        free(heap);
-    }
-}
-
-NoHeap extrair_minimo(MinHeap *heap) {
-    NoHeap vazio = {-1, INF};
-
-    if (heap == NULL || heap->tamanho == 0) {
-        return vazio;
-    }
-
-    NoHeap minimo = heap->dados[0];
-    heap->posicao[minimo.vertice] = -1;
-    heap->tamanho--;
-
-    if (heap->tamanho > 0) {
-        heap->dados[0] = heap->dados[heap->tamanho];
-        heap->posicao[heap->dados[0].vertice] = 0;
-        descer(heap, 0);
-    }
-
-    return minimo;
-}
-
-void diminuir_chave(MinHeap *heap, int vertice,
-                    int nova_distancia) {
-    if (heap == NULL || vertice < 0 ||
-        vertice >= heap->capacidade) {
-        return;
-    }
-
-    int i = heap->posicao[vertice];
-
-    if (i < 0 || i >= heap->tamanho ||
-        nova_distancia >= heap->dados[i].distancia) {
-        return;
-    }
-
-    heap->dados[i].distancia = nova_distancia;
-    subir(heap, i);
-}
-
-void dijkstra(GrafoListaPonderado *g, int origem,
-              int *dist, int *pred) {
-    if (g == NULL || dist == NULL || pred == NULL ||
-        origem < 0 || origem >= g->num_vertices) {
-        return;
-    }
-
-    int n = g->num_vertices;
-    MinHeap *heap = criar_min_heap(n);
-
-    if (heap == NULL) {
-        for (int i = 0; i < n; i++) {
-            dist[i] = INF;
-            pred[i] = -1;
-        }
-        return;
-    }
-
-    for (int i = 0; i < n; i++) {
-        dist[i] = INF;
-        pred[i] = -1;
-        heap->dados[i].vertice = i;
-        heap->dados[i].distancia = INF;
-        heap->posicao[i] = i;
-    }
-
-    heap->tamanho = n;
+void dijkstra(GrafoListaPonderado *g, int origem, int *dist, int *pred)
+{
+    /* O(V + E) de validacao; O((V + E) log V) com heap e O(V) auxiliar.
+     * Cada vertice ocupa uma unica posicao, sem entradas duplicadas. */
+    if (!g || g->n <= 0 || !dist || !pred) return;
+    for (int i = 0; i < g->n; ++i) { dist[i] = INT_MAX; pred[i] = -1; }
+    if (!g->adj || origem < 0 || origem >= g->n) return;
+    for (int i = 0; i < g->n; ++i)
+        for (NoPonderado *a = g->adj[i]; a; a = a->prox)
+            if (a->peso < 0 || a->destino < 0 || a->destino >= g->n) return;
+    MinHeap *h = criar_min_heap(g->n);
+    if (!h) return;
     dist[origem] = 0;
-    heap->dados[origem].distancia = 0;
-    subir(heap, heap->posicao[origem]);
-
-    while (heap->tamanho > 0) {
-        NoHeap atual = extrair_minimo(heap);
-        int u = atual.vertice;
-
-        if (atual.distancia == INF) {
-            break;
-        }
-
-        for (ArestaPonderada *a = g->adj[u];
-             a != NULL; a = a->prox) {
+    for (int i = 0; i < g->n; ++i) inserir_min_heap(h, i, dist[i]);
+    while (h->tamanho > 0) {
+        NoHeap minimo = extrair_minimo(h);
+        int u = minimo.vertice;
+        if (dist[u] == INT_MAX) break;
+        for (NoPonderado *a = g->adj[u]; a; a = a->prox) {
             int v = a->destino;
-
-            if (heap->posicao[v] == -1) {
-                continue;
-            }
-
-            if (dist[u] <= INF - a->peso &&
-                dist[u] + a->peso < dist[v]) {
+            /* Vertices extraidos estao finalizados; evita overflow na soma. */
+            if (h->posicao[v] != -1 && a->peso <= INT_MAX - dist[u]
+                && dist[u] + a->peso < dist[v]) {
                 dist[v] = dist[u] + a->peso;
                 pred[v] = u;
-                diminuir_chave(heap, v, dist[v]);
+                diminuir_chave(h, v, dist[v]);
             }
         }
     }
-
-    liberar_min_heap(heap);
+    liberar_min_heap(h);
 }
 
-int reconstruir_caminho(int origem, int destino, int *pred) {
-    if (pred == NULL || origem < 0 || destino < 0) {
-        return 0;
-    }
-
-    int tamanho = 0;
-    int atual = destino;
-
-    while (atual != -1) {
-        tamanho++;
-
-        if (atual == origem) {
-            break;
+void reconstruir_caminho(int origem, int destino, int *pred)
+{
+    if (!pred || origem < 0 || destino < 0) { puts("Entrada invalida."); return; }
+    int lento = destino, rapido = destino;
+    do {
+        if (rapido == origem || rapido < 0) break;
+        rapido = pred[rapido];
+        if (rapido == origem || rapido < 0) break;
+        rapido = pred[rapido];
+        lento = pred[lento];
+        if (lento == rapido && rapido >= 0 && rapido != origem) {
+            puts("Predecessores invalidos: ciclo."); return;
         }
-
-        atual = pred[atual];
+    } while (rapido >= 0);
+    size_t tamanho = 1;
+    int v = destino;
+    while (v != origem && v >= 0) { v = pred[v]; ++tamanho; }
+    if (v != origem) { puts("Sem caminho."); return; }
+    if (tamanho > SIZE_MAX / sizeof(int)) return;
+    int *caminho = malloc(tamanho * sizeof(*caminho));
+    if (!caminho) { puts("Memoria insuficiente."); return; }
+    v = destino;
+    for (size_t i = tamanho; i > 0; --i) {
+        caminho[i - 1] = v;
+        if (v != origem) v = pred[v];
     }
-
-    if (atual != origem) {
-        printf("Nao existe caminho de %d ate %d.\n",
-               origem, destino);
-        return 0;
-    }
-
-    int *caminho = malloc((size_t)tamanho * sizeof(int));
-
-    if (caminho == NULL) {
-        fprintf(stderr, "Erro ao alocar memoria para o caminho.\n");
-        return 0;
-    }
-
-    atual = destino;
-
-    for (int i = tamanho - 1; i >= 0; i--) {
-        caminho[i] = atual;
-
-        if (atual == origem) {
-            break;
-        }
-
-        atual = pred[atual];
-    }
-
-    printf("Caminho: ");
-
-    for (int i = 0; i < tamanho; i++) {
-        printf("%d", caminho[i]);
-
-        if (i < tamanho - 1) {
-            printf(" -> ");
-        }
-    }
-
-    printf("\n");
-
+    for (size_t i = 0; i < tamanho; ++i) printf("%s%d", i ? " -> " : "", caminho[i]);
+    putchar('\n');
     free(caminho);
-    return tamanho;
 }

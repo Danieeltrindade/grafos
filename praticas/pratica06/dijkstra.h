@@ -1,19 +1,7 @@
-
 #ifndef DIJKSTRA_H
 #define DIJKSTRA_H
 
-#define INF 1000000000
-
-typedef struct ArestaPonderada {
-    int destino;
-    int peso;
-    struct ArestaPonderada *prox;
-} ArestaPonderada;
-
-typedef struct {
-    int num_vertices;
-    ArestaPonderada **adj;
-} GrafoListaPonderado;
+#include <limits.h>
 
 typedef struct {
     int vertice;
@@ -22,24 +10,37 @@ typedef struct {
 
 typedef struct {
     NoHeap *dados;
-    int capacidade;
-    int tamanho;
+    int capacidade, tamanho;
     int *posicao;
 } MinHeap;
 
-GrafoListaPonderado *criar_grafo(int num_vertices);
-int adicionar_aresta(GrafoListaPonderado *g, int origem,
-                     int destino, int peso);
-void liberar_grafo(GrafoListaPonderado *g);
+typedef struct NoPonderado {
+    int destino, peso;
+    struct NoPonderado *prox;
+} NoPonderado;
+
+typedef struct {
+    int n;
+    NoPonderado **adj;
+} GrafoListaPonderado;
 
 MinHeap *criar_min_heap(int capacidade);
-void liberar_min_heap(MinHeap *heap);
+int inserir_min_heap(MinHeap *heap, int vertice, int distancia);
+/* Heap vazio/invalido: retorna {-1, INT_MAX}. */
 NoHeap extrair_minimo(MinHeap *heap);
-void diminuir_chave(MinHeap *heap, int vertice, int nova_distancia);
+void diminuir_chave(MinHeap *heap, int vertice, int distancia);
+void liberar_min_heap(MinHeap *heap);
 
-void dijkstra(GrafoListaPonderado *g, int origem,
-              int *dist, int *pred);
-
-int reconstruir_caminho(int origem, int destino, int *pred);
+GrafoListaPonderado *criar_grafo_lista_ponderado(int n);
+/* Insere uma aresta dirigida; retorna 0 para entrada invalida ou falta de memoria. */
+int inserir_aresta_ponderada(GrafoListaPonderado *g, int origem, int destino, int peso);
+void liberar_grafo_lista_ponderado(GrafoListaPonderado *g);
+/* dist/pred devem ter g->n elementos. Custos representaveis: 0..INT_MAX-1.
+ * INT_MAX representa inalcançavel ou custo nao representavel.
+ * Erros com g/dist/pred validos deixam dist=INT_MAX e pred=-1. */
+void dijkstra(GrafoListaPonderado *g, int origem, int *dist, int *pred);
+/* Imprime o caminho. Sem parametro de tamanho, origem/destino e todos os
+ * predecessores nao negativos devem ser indices validos do vetor pred. */
+void reconstruir_caminho(int origem, int destino, int *pred);
 
 #endif

@@ -1,22 +1,31 @@
-
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -std=c11 -pedantic
+CFLAGS = -Wall -Wextra -Werror -std=c11
+LDLIBS = -lm
 TARGET = main
-SRC = main.c dijkstra.c
-OBJ = $(SRC:.c=.o)
-
-.PHONY: all clean run
+ifeq ($(OS),Windows_NT)
+TARGET = main.exe
+endif
+SRC = $(wildcard *.c)
 
 all: $(TARGET)
 
-$(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ)
-
-%.o: %.c dijkstra.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-clean:
-	rm -f $(TARGET) $(TARGET).exe $(OBJ)
+$(TARGET): $(SRC) dijkstra.h
+	$(CC) $(CFLAGS) $(SRC) -o $@ $(LDLIBS)
 
 run: $(TARGET)
+ifeq ($(OS),Windows_NT)
+	$(TARGET)
+else
 	./$(TARGET)
+endif
+
+test: run
+
+clean:
+ifeq ($(OS),Windows_NT)
+	if exist main.exe del /Q main.exe
+else
+	rm -f main *.o
+endif
+
+.PHONY: all run test clean
